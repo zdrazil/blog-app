@@ -3,6 +3,10 @@ module Main exposing (Model, Msg(..), init, main, subscriptions, update, view)
 import Browser
 import Html exposing (..)
 import Html.Attributes exposing (..)
+import Html.Events exposing (..)
+import Http
+import Json.Decode as Decode
+import Url.Builder as Url
 
 
 
@@ -10,7 +14,12 @@ import Html.Attributes exposing (..)
 
 
 main =
-    Browser.sandbox { init = init, update = update, view = view }
+    Browser.element
+        { init = init
+        , update = update
+        , subscriptions = subscriptions
+        , view = view
+        }
 
 
 
@@ -22,9 +31,9 @@ type alias Model =
     }
 
 
-init : Model
-init =
-    Model [ "abc" ]
+init : () -> ( Model, Cmd Msg )
+init _ =
+    ( Model [], getTags )
 
 
 
@@ -32,14 +41,27 @@ init =
 
 
 type Msg
-    = NoOp
+    = GetTags
+    | NewTags (Result Http.Error (List String))
 
 
-update : Msg -> Model -> Model
+update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        NoOp ->
-            model
+        GetTags ->
+            ( model
+            , getTags
+            )
+
+        NewTags result ->
+            case result of
+                Ok newTags ->
+                    ( { model | tags = newTags }, Cmd.none )
+
+                Err _ ->
+                    ( model
+                    , Cmd.none
+                    )
 
 
 
@@ -153,12 +175,6 @@ view model =
         |> withStyle
 
 
-renderTag : String -> Html Msg
-renderTag tag =
-    a [ class "tag-pill tag-default", href "" ]
-        [ text tag ]
-
-
 withStyle html =
     div []
         [ node "style"
@@ -166,3 +182,30 @@ withStyle html =
             [ text "@import url(https://demo.productionready.io/main.css)" ]
         , html
         ]
+
+
+renderTag : String -> Html Msg
+renderTag tag =
+    a [ class "tag-pill tag-default", href "" ]
+        [ text tag ]
+
+
+
+-- HTTP
+
+
+getTags : Cmd Msg
+getTags =
+    Http.send NewTags (Http.get toTagsUrl tagsDecoder)
+
+
+toTagsUrl : String
+toTagsUrl =
+    Url.crossOrigin "https://conduit.productionready.io"
+        [ "api", "tags" ]
+        []
+
+
+tagsDecoder : Decode.Decoder (List String)
+tagsDecoder =
+    Decode.field "tags" (Decode.list Decode.string)
