@@ -18,13 +18,13 @@ main =
 
 
 type alias Model =
-    { name : String
+    { tags : List String
     }
 
 
 init : Model
 init =
-    Model "hello"
+    Model [ "abc" ]
 
 
 
@@ -141,29 +141,22 @@ view model =
                         [ p []
                             [ text "Popular Tags" ]
                         , div [ class "tag-list" ]
-                            [ a [ class "tag-pill tag-default", href "" ]
-                                [ text "programming" ]
-                            , a [ class "tag-pill tag-default", href "" ]
-                                [ text "javascript" ]
-                            , a [ class "tag-pill tag-default", href "" ]
-                                [ text "emberjs" ]
-                            , a [ class "tag-pill tag-default", href "" ]
-                                [ text "angularjs" ]
-                            , a [ class "tag-pill tag-default", href "" ]
-                                [ text "react" ]
-                            , a [ class "tag-pill tag-default", href "" ]
-                                [ text "mean" ]
-                            , a [ class "tag-pill tag-default", href "" ]
-                                [ text "node" ]
-                            , a [ class "tag-pill tag-default", href "" ]
-                                [ text "rails" ]
-                            ]
+                            (List.map
+                                renderTag
+                                model.tags
+                            )
                         ]
                     ]
                 ]
             ]
         ]
         |> withStyle
+
+
+renderTag : String -> Html Msg
+renderTag tag =
+    a [ class "tag-pill tag-default", href "" ]
+        [ text tag ]
 
 
 withStyle html =
