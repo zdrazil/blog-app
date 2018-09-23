@@ -58,6 +58,7 @@ type alias Articles =
 
 type alias Model =
     { articles : Articles
+    , currentTag : Maybe String
     , limit : Int
     , page : Int
     , tags : List String
@@ -66,7 +67,7 @@ type alias Model =
 
 init : () -> ( Model, Cmd Msg )
 init _ =
-    ( Model (Articles [] 0) 10 0 [], Platform.Cmd.batch [ getTags, getArticles 10 0 ] )
+    ( Model (Articles [] 0) Nothing 10 0 [], Platform.Cmd.batch [ getTags, getArticles 10 0 Nothing ] )
 
 
 
@@ -79,6 +80,7 @@ type Msg
     | GetArticles
     | NewArticles (Result Http.Error Articles)
     | ChangePage Int
+    | ChangeTag (Maybe String)
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -101,7 +103,7 @@ update msg model =
 
         GetArticles ->
             ( model
-            , getArticles model.limit (model.page * 10)
+            , getArticles model.limit (model.page * 10) model.currentTag
             )
 
         NewArticles result ->
@@ -113,9 +115,14 @@ update msg model =
                     ( model, Cmd.none )
 
         ChangePage page ->
-            ( { model | page = page }
-            , getArticles 10 (page * 10)
-            )
+            update GetArticles
+                { model | page = page }
+
+        ChangeTag tag ->
+            update GetArticles
+                { model
+                    | currentTag = tag
+                }
 
 
 
@@ -152,8 +159,16 @@ view model =
                                     [ text "Your Feed" ]
                                 ]
                             , li [ class "nav-item" ]
-                                [ a [ class "nav-link active", href "" ]
-                                    [ text "Global Feed" ]
+                                [ a [ class "nav-link active", href "#" ]
+                                    [ text
+                                        (case model.currentTag of
+                                            Just currentTag ->
+                                                "#" ++ currentTag
+
+                                            Nothing ->
+                                                "Global Feed"
+                                        )
+                                    ]
                                 ]
                             ]
                         ]
@@ -192,7 +207,7 @@ withStyle html =
 
 renderTag : String -> Html Msg
 renderTag tag =
-    a [ class "tag-pill tag-default", href "" ]
+    a [ class "tag-pill tag-default", href "#", onClick (ChangeTag (Just tag)) ]
         [ text tag ]
 
 
@@ -267,17 +282,22 @@ tagsDecoder =
     Decode.field "tags" (Decode.list Decode.string)
 
 
-getArticles : Int -> Int -> Cmd Msg
-getArticles limit offset =
-    Http.send NewArticles (Http.get (toArticlesUrl limit offset) articlesDecoder)
+getArticles : Int -> Int -> Maybe String -> Cmd Msg
+getArticles limit offset tag =
+    Http.send NewArticles (Http.get (toArticlesUrl limit offset tag) articlesDecoder)
 
 
-toArticlesUrl : Int -> Int -> String
-toArticlesUrl limit offset =
+
+-- TODO: don't use tag when selected tag is empty
+
+
+toArticlesUrl : Int -> Int -> Maybe String -> String
+toArticlesUrl limit offset tag =
     Url.crossOrigin "https://conduit.productionready.io"
         [ "api", "articles" ]
         [ Url.string "limit" (String.fromInt limit)
         , Url.string "offset" (String.fromInt offset)
+        , Url.string "tag" (Maybe.withDefault "" tag)
         ]
 
 
