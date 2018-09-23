@@ -6,6 +6,8 @@ import Html.Attributes exposing (..)
 import Html.Events exposing (..)
 import Http
 import Json.Decode as Decode
+import Json.Decode.Pipeline exposing (hardcoded, optional, required)
+import Platform.Cmd
 import Url.Builder as Url
 
 
@@ -26,14 +28,45 @@ main =
 -- MODEL
 
 
+type alias Article =
+    { title : String
+    , slug : String
+    , body : String
+    , createdAt : String
+    , updatedAt : String
+    , tagList : List String
+    , description : String
+    , author : ArticleAuthor
+    , favorited : Bool
+    , favoritesCount : Int
+    }
+
+
+type alias ArticleAuthor =
+    { username : String
+    , bio : Maybe Bool
+    , image : String
+    , following : Bool
+    }
+
+
+type alias Articles =
+    { articles : List Article
+    , articleCount : Int
+    }
+
+
 type alias Model =
-    { tags : List String
+    { articles : Articles
+    , limit : Int
+    , offset : Int
+    , tags : List String
     }
 
 
 init : () -> ( Model, Cmd Msg )
 init _ =
-    ( Model [], getTags )
+    ( Model (Articles [] 0) 10 0 [], Platform.Cmd.batch [ getTags, getArticles 10 0 ] )
 
 
 
@@ -43,6 +76,8 @@ init _ =
 type Msg
     = GetTags
     | NewTags (Result Http.Error (List String))
+    | GetArticles
+    | NewArticles (Result Http.Error Articles)
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -62,6 +97,19 @@ update msg model =
                     ( model
                     , Cmd.none
                     )
+
+        GetArticles ->
+            ( model
+            , getArticles model.limit model.offset
+            )
+
+        NewArticles result ->
+            case result of
+                Ok newArticles ->
+                    ( { model | articles = newArticles }, Cmd.none )
+
+                Err _ ->
+                    ( model, Cmd.none )
 
 
 
@@ -103,60 +151,11 @@ view model =
                                 ]
                             ]
                         ]
-                    , div [ class "article-preview" ]
-                        [ div [ class "article-meta" ]
-                            [ a [ href "profile.html" ]
-                                [ img [ src "http://i.imgur.com/Qr71crq.jpg" ]
-                                    []
-                                ]
-                            , div [ class "info" ]
-                                [ a [ class "author", href "" ]
-                                    [ text "Eric Simons" ]
-                                , span [ class "date" ]
-                                    [ text "January 20th" ]
-                                ]
-                            , button [ class "btn btn-outline-primary btn-sm pull-xs-right" ]
-                                [ i [ class "ion-heart" ]
-                                    []
-                                , text "29            "
-                                ]
-                            ]
-                        , a [ class "preview-link", href "" ]
-                            [ h1 []
-                                [ text "How to build webapps that scale" ]
-                            , p []
-                                [ text "This is the description for the post." ]
-                            , span []
-                                [ text "Read more..." ]
-                            ]
-                        ]
-                    , div [ class "article-preview" ]
-                        [ div [ class "article-meta" ]
-                            [ a [ href "profile.html" ]
-                                [ img [ src "http://i.imgur.com/N4VcUeJ.jpg" ]
-                                    []
-                                ]
-                            , div [ class "info" ]
-                                [ a [ class "author", href "" ]
-                                    [ text "Albert Pai" ]
-                                , span [ class "date" ]
-                                    [ text "January 20th" ]
-                                ]
-                            , button [ class "btn btn-outline-primary btn-sm pull-xs-right" ]
-                                [ i [ class "ion-heart" ]
-                                    []
-                                , text "32            "
-                                ]
-                            ]
-                        , a [ class "preview-link", href "" ]
-                            [ h1 []
-                                [ text "The song you won't ever stop singing. No matter how hard you try." ]
-                            , p []
-                                [ text "This is the description for the post." ]
-                            , span []
-                                [ text "Read more..." ]
-                            ]
-                        ]
+                    , div []
+                        (List.map
+                            renderArticle
+                            model.articles.articles
+                        )
                     ]
                 , div [ class "col-md-3" ]
                     [ div [ class "sidebar" ]
@@ -190,6 +189,37 @@ renderTag tag =
         [ text tag ]
 
 
+renderArticle : Article -> Html Msg
+renderArticle article =
+    div [ class "article-preview" ]
+        [ div [ class "article-meta" ]
+            [ a [ href "profile.html" ]
+                [ img [ src article.author.image ]
+                    []
+                ]
+            , div [ class "info" ]
+                [ a [ class "author", href "" ]
+                    [ text article.author.username ]
+                , span [ class "date" ]
+                    [ text article.createdAt ]
+                ]
+            , button [ class "btn btn-outline-primary btn-sm pull-xs-right" ]
+                [ i [ class "ion-heart" ]
+                    []
+                , text (String.fromInt article.favoritesCount)
+                ]
+            ]
+        , a [ class "preview-link", href "" ]
+            [ h1 []
+                [ text article.title ]
+            , p []
+                [ text article.description ]
+            , span []
+                [ text "Read more..." ]
+            ]
+        ]
+
+
 
 -- HTTP
 
@@ -209,3 +239,48 @@ toTagsUrl =
 tagsDecoder : Decode.Decoder (List String)
 tagsDecoder =
     Decode.field "tags" (Decode.list Decode.string)
+
+
+getArticles : Int -> Int -> Cmd Msg
+getArticles limit offset =
+    Http.send NewArticles (Http.get (toArticlesUrl limit offset) articlesDecoder)
+
+
+toArticlesUrl : Int -> Int -> String
+toArticlesUrl limit offset =
+    Url.crossOrigin "https://conduit.productionready.io"
+        [ "api", "articles" ]
+        [ Url.string "limit" (String.fromInt limit)
+        , Url.string "offset" (String.fromInt offset)
+        ]
+
+
+articlesDecoder : Decode.Decoder Articles
+articlesDecoder =
+    Decode.map2 Articles
+        (Decode.field "articles" (Decode.list articleDecoder))
+        (Decode.field "articlesCount" Decode.int)
+
+
+articleDecoder : Decode.Decoder Article
+articleDecoder =
+    Decode.succeed Article
+        |> required "title" Decode.string
+        |> required "slug" Decode.string
+        |> required "body" Decode.string
+        |> required "createdAt" Decode.string
+        |> required "updatedAt" Decode.string
+        |> required "tagList" (Decode.list Decode.string)
+        |> required "description" Decode.string
+        |> required "author" articleAuthorDecoder
+        |> required "favorited" Decode.bool
+        |> required "favoritesCount" Decode.int
+
+
+articleAuthorDecoder : Decode.Decoder ArticleAuthor
+articleAuthorDecoder =
+    Decode.map4 ArticleAuthor
+        (Decode.field "username" Decode.string)
+        (Decode.field "bio" (Decode.maybe Decode.bool))
+        (Decode.field "image" Decode.string)
+        (Decode.field "following" Decode.bool)
