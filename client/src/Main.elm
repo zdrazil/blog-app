@@ -59,7 +59,7 @@ type alias Articles =
 type alias Model =
     { articles : Articles
     , limit : Int
-    , offset : Int
+    , page : Int
     , tags : List String
     }
 
@@ -78,6 +78,7 @@ type Msg
     | NewTags (Result Http.Error (List String))
     | GetArticles
     | NewArticles (Result Http.Error Articles)
+    | ChangePage Int
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -100,7 +101,7 @@ update msg model =
 
         GetArticles ->
             ( model
-            , getArticles model.limit model.offset
+            , getArticles model.limit (model.page * 10)
             )
 
         NewArticles result ->
@@ -110,6 +111,11 @@ update msg model =
 
                 Err _ ->
                     ( model, Cmd.none )
+
+        ChangePage page ->
+            ( { model | page = page }
+            , getArticles 10 (page * 10)
+            )
 
 
 
@@ -156,6 +162,7 @@ view model =
                             renderArticle
                             model.articles.articles
                         )
+                    , nav [] (List.map (renderPagination model.page) (List.range 0 ((model.articles.articleCount - remainderBy model.articles.articleCount 10) // 10)))
                     ]
                 , div [ class "col-md-3" ]
                     [ div [ class "sidebar" ]
@@ -216,6 +223,25 @@ renderArticle article =
                 [ text article.description ]
             , span []
                 [ text "Read more..." ]
+            ]
+        ]
+
+
+renderPagination : Int -> Int -> Html Msg
+renderPagination currentPage page =
+    ul [ class "pagination" ]
+        [ li
+            [ classList
+                [ ( "page-item", True )
+                , ( "active", page == currentPage )
+                ]
+            ]
+            [ a
+                [ class "page-link"
+                , href "#"
+                , onClick (ChangePage page)
+                ]
+                [ text (String.fromInt (page + 1)) ]
             ]
         ]
 
